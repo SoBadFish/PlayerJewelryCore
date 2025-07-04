@@ -128,18 +128,18 @@ public class PlayerJewelryCore extends PluginBase implements Listener {
             List<GeometryData> geometryData = new ArrayList<>(PLAYERS.values());
             MergeResultGeometry pd = loadGeometry(player.getSkin(),geometryData);
             //生成模型和图片用作测试
-            File last = new File(getDataFolder() + "/merged_" + player.getName() + ".last.png");
-            try {
-                ImageIO.write(pd.skinPng, "PNG", last);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            File outNet = new File(getDataFolder() + "/skin_" + player.getName() + ".new.json");
-            try {
-                Utils.writeFile(outNet, gson.toJson(pd.geometryJsonData));
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+//            File last = new File(getDataFolder() + "/merged_" + player.getName() + ".last.png");
+//            try {
+//                ImageIO.write(pd.skinPng, "PNG", last);
+//            } catch (IOException e) {
+//                e.printStackTrace();
+//            }
+//            File outNet = new File(getDataFolder() + "/skin_" + player.getName() + ".new.json");
+//            try {
+//                Utils.writeFile(outNet, gson.toJson(pd.geometryJsonData));
+//            } catch (IOException e) {
+//                e.printStackTrace();
+//            }
 
             Skin skin1 = new Skin();
             skin1.setCapeData(modelBone.getCapeData());
