@@ -8,6 +8,7 @@ import cn.nukkit.event.EventHandler;
 import cn.nukkit.event.Listener;
 import cn.nukkit.event.player.PlayerJoinEvent;
 import cn.nukkit.event.player.PlayerPreLoginEvent;
+import cn.nukkit.network.protocol.PlayerSkinPacket;
 import cn.nukkit.plugin.PluginBase;
 import cn.nukkit.scheduler.PluginTask;
 import cn.nukkit.utils.SerializedImage;
@@ -49,6 +50,7 @@ public class PlayerJewelryCore extends PluginBase implements Listener {
     public static PlayerJewelryCore INSTANCE;
 
     public LinkedHashMap<String, GeometryData> PLAYERS = new LinkedHashMap<>();
+
 
     @Override
     public void onEnable() {
@@ -149,15 +151,13 @@ public class PlayerJewelryCore extends PluginBase implements Listener {
             skin1.setSkinId(modelBone.getSkinId());
             skin1.setSkinResourcePatch(modelBone.getSkinResourcePatch());
             skin1.isLegacySlim = modelBone.isLegacySlim;
-            //2秒后实现
-            Server.getInstance().getScheduler().scheduleDelayedTask(new PluginTask<>(getInstance()) {
-                @Override
-                public void onRun(int i) {
-                    if (player.isOnline()) {
-                        player.setSkin(skin1);
-                    }
-                }
-            },20);
+            PlayerSkinPacket pk = new PlayerSkinPacket();
+            pk.skin = skin1;
+            pk.uuid = player.getUniqueId();
+            pk.newSkinName = "";
+            pk.oldSkinName = "";
+            Server.getInstance().getOnlinePlayers().values().forEach(p->p.dataPacket(pk));
+
         });
     }
 
