@@ -1,0 +1,12 @@
+name: PlayerJeweleryCore
+main: org.sobadfish.playerjewerlycore.PlayerJewelryCore
+version: 1.0.0
+api:
+  - 1.0.11
+  - 3.0.0
+author: sobadfish
+load: STARTUP
+description: "玩家饰品核心"
+
+
+
