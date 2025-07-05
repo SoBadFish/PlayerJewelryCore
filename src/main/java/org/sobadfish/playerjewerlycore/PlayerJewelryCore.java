@@ -206,6 +206,7 @@ public class PlayerJewelryCore extends PluginBase implements Listener {
                                             int[] uv = new int[]{cube.getUv()[0], cube.getUv()[1]};
                                             uv[0] += uvPoint.x;
                                             uv[1] += uvPoint.y;
+                                            cube.setUv(uv);
                                         }
                                     }));
                 });
