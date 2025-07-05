@@ -173,7 +173,7 @@ public class PlayerJewelryCore extends PluginBase implements Listener {
     private MergeResultGeometry loadGeometry(Skin defSkin, List<GeometryData> skinData) {
         // 缓存解析结果
         Gson gson = new Gson();
-        GeometryJsonData pd = gson.fromJson(defSkin.getGeometryData(), GeometryJsonData.class).clone();
+        GeometryJsonData pd = gson.fromJson(defSkin.getGeometryData(), GeometryJsonData.class);
 
         // 预分配图像集合大小
         int enabledCount = (int)skinData.stream().filter(d -> d.enable).count();
