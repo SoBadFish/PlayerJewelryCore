@@ -64,81 +64,101 @@ public class ImageUtils {
     }
 
     /**
-     * 动态调整画布大小拼接图像(64→128→256...)
-     * <p>
      * 动态调整画布大小拼接图像
      *
-     * @param images 图片数组(第一个位置不变，其余按面积从大到小排列)
-     * @return 包含拼接图像和各图像左上角坐标的结果对象(坐标顺序与输入顺序一致)
+     * @param images 图片数组(按面积从大到小排列)
+     * @return 包含拼接图像和各图像左上角坐标的结果对象
+     * @throws IllegalArgumentException 如果图片尺寸超过限制
      */
     public static MergeResult mergeImagesWithDynamicCanvas(BufferedImage... images) {
         if (images == null || images.length == 0) {
             throw new IllegalArgumentException("图片数组不能为空");
         }
 
-        // 复制数组并排序(第一个保持原样，其余按面积从大到小)
-        BufferedImage[] sortedImages = images.clone();
-        if (sortedImages.length > 1) {
-            java.util.Arrays.sort(sortedImages, 1, sortedImages.length,
-                    (img1, img2) -> {
-                        int area1 = img1.getWidth() * img1.getHeight();
-                        int area2 = img2.getWidth() * img2.getHeight();
-                        return Integer.compare(area2, area1); // 降序排序
-                    });
+        // 验证单张图片尺寸不超过64x64
+        for (BufferedImage img : images) {
+            if (img.getWidth() > 64 || img.getHeight() > 64) {
+                throw new IllegalArgumentException("单张图片尺寸不能超过64x64");
+            }
         }
 
-        List<Point> positions = new java.util.ArrayList<>();
+        // 固定画布大小为128x128并添加严格验证
+        int canvasSize = 128;
 
-        // 计算最小图片尺寸作为网格单元基准
-        int minWidth = Integer.MAX_VALUE;
-        int minHeight = Integer.MAX_VALUE;
-        for (BufferedImage img : sortedImages) {
-            minWidth = Math.min(minWidth, img.getWidth());
-            minHeight = Math.min(minHeight, img.getHeight());
-        }
-        int cellSize = Math.max(minWidth, minHeight);
-
-        // 计算初始网格(128x128)
-        int gridSize = 128 / cellSize;
-        int currentSize = 128;
-
-        // 检查是否需要更大的画布(256x256)
-        int requiredCells = (int) Math.ceil(Math.sqrt(sortedImages.length));
-        if (requiredCells > gridSize || cellSize * gridSize > 128) {
-            currentSize = 256;
-            gridSize = 256 / cellSize;
-        }
-
-        // 验证画布是否足够大
-        if (cellSize * gridSize > currentSize) {
-            throw new IllegalArgumentException("无法在"+currentSize+"x"+currentSize+
-                "画布上放置所有图片(需要至少"+cellSize*gridSize+"x"+cellSize*gridSize+")");
-        }
-
-        BufferedImage mergedImage = new BufferedImage(currentSize, currentSize, BufferedImage.TYPE_INT_ARGB);
+        BufferedImage mergedImage = new BufferedImage(canvasSize, canvasSize, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = mergedImage.createGraphics();
         g.setComposite(AlphaComposite.SrcOver);
 
-        // 计算每个图像的位置并绘制(保持原始尺寸)
-        for (int i = 0; i < sortedImages.length; i++) {
-            int row = i / gridSize;
-            int col = i % gridSize;
-            int x = col * cellSize;
-            int y = row * cellSize;
+        List<Point> positions = new java.util.ArrayList<>();
 
-            // 保持原始顺序的坐标映射
-            int originalIndex = i == 0 ? 0 :
-                    java.util.Arrays.asList(images).indexOf(sortedImages[i]);
-            while (positions.size() <= originalIndex) {
-                positions.add(null);
+        // 使用二维装箱算法优化空间利用率
+        int x = 0;
+        int y = 0;
+        int currentRowHeight = 0;
+        int maxY = 0;
+
+        for (BufferedImage img : images) {
+            // 如果当前行放不下，尝试换行
+            if (x + img.getWidth() > canvasSize) {
+                x = 0;
+                y = maxY;
+                currentRowHeight = 0;
             }
-            positions.set(originalIndex, new Point(x, y));
 
-            // 直接绘制原图，不缩放
-            g.drawImage(sortedImages[i], x, y, null);
+            // 如果换行后还是放不下，尝试在剩余空间寻找合适位置
+            if (y + img.getHeight() > canvasSize) {
+                boolean placed = false;
+                // 尝试在已放置图片的上方寻找空间
+                for (Point pos : positions) {
+                    if (pos.x + img.getWidth() <= canvasSize &&
+                            pos.y >= img.getHeight() &&
+                            checkSpace(positions, pos.x, pos.y - img.getHeight(), img.getWidth(), img.getHeight())) {
+                        x = pos.x;
+                        y = pos.y - img.getHeight();
+                        placed = true;
+                        break;
+                    }
+                }
+                if (!placed) {
+                    throw new IllegalArgumentException("图片总尺寸超过128x128画布限制");
+                }
+            }
+
+            positions.add(new Point(x, y));
+            g.drawImage(img, x, y, null);
+
+            // 更新位置和最大高度
+            x += img.getWidth();
+            currentRowHeight = Math.max(currentRowHeight, img.getHeight());
+            maxY = Math.max(maxY, y + img.getHeight());
         }
 
         g.dispose();
         return new MergeResult(mergedImage, positions);
+    }
+
+    /**
+     * 检查指定区域是否有足够空间放置图片
+     */
+
+    private static boolean checkSpace(List<Point> positions, int x, int y, int width, int height) {
+        // 检查画布边界
+        if (x < 0 || y < 0 || x + width > 128 || y + height > 128) {
+            return false;
+        }
+
+        // 检查与已放置图片的重叠
+        for (Point pos : positions) {
+            // 检查四个方向是否完全不重叠
+            boolean notOverlap = x + width <= pos.x ||  // 当前图片在左侧
+                               x >= pos.x + width ||    // 当前图片在右侧
+                               y + height <= pos.y ||   // 当前图片在上方
+                               y >= pos.y + height;     // 当前图片在下方
+
+            if (!notOverlap) {
+                return false;
+            }
+        }
+        return true;
     }
 }

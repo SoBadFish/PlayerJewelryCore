@@ -1,15 +1,128 @@
 package org.sobadfish.playerjewerlycore.core;
 
+import com.google.gson.Gson;
+import com.google.gson.TypeAdapter;
 import com.google.gson.annotations.SerializedName;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
+import com.google.gson.stream.JsonWriter;
 
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * 玩家JSON模型数据实体类
- * */
 public class GeometryJsonData implements Cloneable {
+
+    /**
+     * 自定义Cube解析适配器
+     */
+    public static class CubeTypeAdapter extends TypeAdapter<GeometryJsonData.Geometry.Bone.Cube> {
+        private final Gson gson = new Gson();
+
+        @Override
+        public void write(JsonWriter out, GeometryJsonData.Geometry.Bone.Cube cube) throws IOException {
+            out.beginObject();
+            out.name("origin").jsonValue(gson.toJson(cube.getOrigin()));
+            out.name("size").jsonValue(gson.toJson(cube.getSize()));
+
+            // 处理UV字段
+            Object uv = cube.getUv();
+            if (uv != null) {
+                out.name("uv");
+                if (uv instanceof int[]) {
+                    out.jsonValue(gson.toJson(uv));
+                } else if (uv instanceof Map) {
+                    out.beginObject();
+                    for (Map.Entry<String, ?> entry : ((Map<String, ?>) uv).entrySet()) {
+                        out.name(entry.getKey()).jsonValue(gson.toJson(entry.getValue()));
+                    }
+                    out.endObject();
+                }
+            }
+
+            if (cube.getInflate() != null) {
+                out.name("inflate").value(cube.getInflate());
+            }
+
+            out.endObject();
+        }
+
+        @Override
+        public GeometryJsonData.Geometry.Bone.Cube read(JsonReader in) throws IOException {
+            GeometryJsonData.Geometry.Bone.Cube cube = new GeometryJsonData.Geometry.Bone.Cube();
+            in.beginObject();
+            while (in.hasNext()) {
+                String name = in.nextName();
+                switch (name) {
+                    case "origin":
+                        in.beginArray();
+                        float[] origin = new float[3];
+                        for (int i = 0; i < 3; i++) {
+                            origin[i] = (float) in.nextDouble();
+                        }
+                        cube.setOrigin(origin);
+                        in.endArray();
+                        break;
+                    case "size":
+                        in.beginArray();
+                        float[] size = new float[3];
+                        for (int i = 0; i < 3; i++) {
+                            size[i] = (float) in.nextDouble();
+                        }
+                        cube.setSize(size);
+                        in.endArray();
+                        break;
+                    case "uv":
+                        if (in.peek() == JsonToken.BEGIN_ARRAY) {
+                            in.beginArray();
+                            int[] uv = new int[2];
+                            uv[0] = in.nextInt();
+                            uv[1] = in.nextInt();
+                            cube.setUv(uv);
+                            in.endArray();
+                        } else if (in.peek() == JsonToken.BEGIN_OBJECT) {
+                            Map<String, Geometry.Bone.Face> uvMap = new HashMap<>();
+                            in.beginObject();
+                            while (in.hasNext()) {
+                                String faceName = in.nextName();
+                                in.beginObject();
+                                Geometry.Bone.Face face = new Geometry.Bone.Face();
+                                while (in.hasNext()) {
+                                    String prop = in.nextName();
+                                    if ("uv".equals(prop)) {
+                                        in.beginArray();
+                                        face.setUv(new int[]{in.nextInt(), in.nextInt()});
+                                        in.endArray();
+                                    } else if ("uv_size".equals(prop)) {
+                                        in.beginArray();
+                                        face.setUvSize(new int[]{in.nextInt(), in.nextInt()});
+                                        in.endArray();
+                                    } else {
+                                        in.skipValue();
+                                    }
+                                }
+                                uvMap.put(faceName, face);
+                                in.endObject();
+                            }
+                            cube.setUv(uvMap);
+                            in.endObject();
+                        }
+                        break;
+                    case "inflate":
+                        cube.setInflate((float) in.nextDouble());
+                        break;
+                    default:
+                        in.skipValue();
+                        break;
+                }
+            }
+            in.endObject();
+            return cube;
+        }
+    }
+
     private String format_version;
 
     @SerializedName("minecraft:geometry")
@@ -309,9 +422,13 @@ public class GeometryJsonData implements Cloneable {
             }
 
             public static class Cube implements Cloneable{
+
                 private float[] origin;
                 private float[] size;
-                private int[] uv;
+
+                @SerializedName("uv")
+                private Object uv; // 可以是int[]或Map<String, Face>
+
                 private Float inflate;
 
                 // Getters and Setters
@@ -331,11 +448,11 @@ public class GeometryJsonData implements Cloneable {
                     this.size = size;
                 }
 
-                public int[] getUv() {
+                public Object getUv() {
                     return uv;
                 }
 
-                public void setUv(int[] uv) {
+                public void setUv(Object uv) {
                     this.uv = uv;
                 }
 
@@ -347,19 +464,90 @@ public class GeometryJsonData implements Cloneable {
                     this.inflate = inflate;
                 }
 
+                /**
+                 * 获取UV作为数组
+                 */
+                public int[] getUvAsArray() {
+                    if (uv instanceof List) {
+                        List<?> list = (List<?>) uv;
+                        return list.stream()
+                                .mapToInt(o -> ((Number) o).intValue())
+                                .toArray();
+                    } else if (uv instanceof int[]) {
+                        return (int[]) uv;
+                    }
+                    return null;
+                }
+
+                /**
+                 * 获取UV作为面映射
+                 */
+                public Map<String, Face> getUvAsMap() {
+                    if (uv instanceof Map) {
+                        return (Map<String, Face>) uv;
+                    }
+                    return null;
+                }
+
+                /**
+                 * 统一设置UV值
+                 */
+                public void setUvValue(int[] uvArray) {
+                    this.uv = uvArray;
+                }
+
                 @Override
                 public Cube clone() {
                     try {
                         Cube clone = (Cube) super.clone();
-                        if (origin != null) {
-                            clone.origin = origin.clone();
+                        if (origin != null) clone.origin = origin.clone();
+                        if (size != null) clone.size = size.clone();
+                        if (uv instanceof int[]) {
+                            clone.uv = ((int[]) uv).clone();
+                        } else if (uv instanceof Map) {
+                            Map<String, Face> uvAsMap = getUvAsMap();
+                            uvAsMap.replaceAll((k, v) -> v.clone());
+                            clone.uv = new HashMap<>((Map<?, ?>) uvAsMap);
                         }
-                        if (size != null) {
-                            clone.size = size.clone();
-                        }
-                        if (uv != null) {
-                            clone.uv = uv.clone();
-                        }
+                        return clone;
+                    } catch (CloneNotSupportedException e) {
+                        throw new AssertionError();
+                    }
+                }
+
+
+
+            }
+            public static class Face implements Cloneable{
+                private int[] uv;
+                @SerializedName("uv_size")
+                private int[] uvSize;
+
+                public int[] getUv() {
+                    return uv;
+                }
+
+                public void setUv(int[] uv) {
+                    this.uv = uv;
+                }
+
+                public int[] getUvSize() {
+                    return uvSize;
+                }
+
+                public void setUvSize(int[] uvSize) {
+                    this.uvSize = uvSize;
+                }
+
+                @Override
+                public Face clone() {
+                    try {
+                        Face clone = (Face) super.clone();
+
+                        if (uvSize != null) clone.uvSize = uvSize.clone();
+
+                        clone.uv = uv.clone();
+
                         return clone;
                     } catch (CloneNotSupportedException e) {
                         throw new AssertionError();

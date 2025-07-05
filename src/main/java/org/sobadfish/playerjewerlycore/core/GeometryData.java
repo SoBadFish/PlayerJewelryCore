@@ -40,4 +40,48 @@ public class GeometryData implements Cloneable{
             return null;
         }
     }
+
+
+    /**
+     * 将模型位置绑定到左手
+     * */
+    public void bindLeftHand(String modelName){
+        bindParent(modelName,"leftArm");
+    }
+
+    /**
+     * 将模型位置绑定到右手
+     * */
+    public void bindRightHand(String modelName){
+        bindParent(modelName,"rightArm");
+    }
+
+    /**
+     * 将模型位置绑定到头
+     * */
+    public void bindHead(String modelName){
+        bindParent(modelName,"head");
+    }
+
+    /**
+     * 将模型位置绑定到身体
+     * */
+    public void bindBody(String modelName){
+        bindParent(modelName,"body");
+    }
+
+
+    public void bindParent(String modelName,String geometryName){
+        for(GeometryJsonData.Geometry geometry:skinData.getMinecraftGeometry()){
+            if(geometry.getBones() != null && !geometry.getBones().isEmpty()){
+                for(GeometryJsonData.Geometry.Bone bone:geometry.getBones()){
+                    if(bone.getName().equals(modelName)){
+                        bone.setParent(geometryName);
+                    }
+                }
+            }
+        }
+    }
+
+
 }
