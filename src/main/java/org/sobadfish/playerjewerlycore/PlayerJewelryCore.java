@@ -56,7 +56,6 @@ public class PlayerJewelryCore extends PluginBase implements Listener {
     public void onEnable() {
         INSTANCE = this;
         this.getServer().getPluginManager().registerEvents(this,this);
-
         saveDefaultConfig();
         reloadConfig();
         this.getLogger().info("玩家饰品核心 已加载");
@@ -96,7 +95,6 @@ public class PlayerJewelryCore extends PluginBase implements Listener {
             Gson gson = new Gson();
             String jsonContent = Utils.readFile(skinModel);
             GeometryJsonData modelJson = gson.fromJson(jsonContent, GeometryJsonData.class);
-
             return new GeometryData(modelImage,modelJson);
         } catch (IOException e) {
             e.printStackTrace();
@@ -133,22 +131,25 @@ public class PlayerJewelryCore extends PluginBase implements Listener {
         Skin modelBone = PLAYER_DEFAULT_SKIN.get(player.getName());
         executorService.execute(() -> {
             Gson gson = new GsonBuilder().create();
-            List<GeometryData> geometryData = new ArrayList<>(PLAYERS.values());
-            MergeResultGeometry pd = loadGeometry(PLAYER_DEFAULT_SKIN.get(player.getName()),geometryData);
-            //生成模型和图片用作测试
-//            File last = new File(getDataFolder() + "/merged_" + player.getName() + ".last.png");
-//            try {
-//                ImageIO.write(pd.skinPng, "PNG", last);
-//            } catch (IOException e) {
-//                e.printStackTrace();
-//            }
-//            File outNet = new File(getDataFolder() + "/skin_" + player.getName() + ".new.json");
-//            try {
-//                Utils.writeFile(outNet, gson.toJson(pd.geometryJsonData));
-//            } catch (IOException e) {
-//                e.printStackTrace();
-//            }
-
+            // 创建PLAYERS数据的深拷贝
+            List<GeometryData> geometryDataCopy = new ArrayList<>(PLAYERS.size());
+            for(GeometryData data : PLAYERS.values()) {
+                GeometryData copy = new GeometryData(
+                   data.image,
+                   data.skinData.clone()
+                );
+                copy.enable = data.enable;
+                geometryDataCopy.add(copy);
+            }
+            MergeResultGeometry pd = loadGeometry(PLAYER_DEFAULT_SKIN.get(player.getName()),geometryDataCopy);
+            if(getConfig().getBoolean("generate-merge-model",true)) {
+                try {
+                    ImageIO.write(pd.skinPng, "png", new File(getDataFolder()+"/"+player.getName()+".png"));
+                    Utils.writeFile(getDataFolder()+"/"+player.getName()+".json",gson.toJson(pd.geometryJsonData));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
             Skin skin1 = new Skin();
             skin1.setCapeData(modelBone.getCapeData());
             skin1.setSkinData(pd.skinPng);
@@ -172,7 +173,7 @@ public class PlayerJewelryCore extends PluginBase implements Listener {
     private MergeResultGeometry loadGeometry(Skin defSkin, List<GeometryData> skinData) {
         // 缓存解析结果
         Gson gson = new Gson();
-        GeometryJsonData pd = gson.fromJson(defSkin.getGeometryData(), GeometryJsonData.class);
+        GeometryJsonData pd = gson.fromJson(defSkin.getGeometryData(), GeometryJsonData.class).clone();
 
         // 预分配图像集合大小
         int enabledCount = (int)skinData.stream().filter(d -> d.enable).count();
@@ -181,8 +182,8 @@ public class PlayerJewelryCore extends PluginBase implements Listener {
 
         // 并行处理图像收集
         skinData.parallelStream()
-                .filter(d -> d.enable)
-                .forEach(d -> bufferedImages.add(d.image));
+            .filter(d -> d.enable)
+            .forEach(d -> bufferedImages.add(d.image));
 
         ImageUtils.MergeResult result = ImageUtils.mergeImagesWithDynamicCanvas(bufferedImages.toArray(new BufferedImage[0]));
 
@@ -194,22 +195,28 @@ public class PlayerJewelryCore extends PluginBase implements Listener {
 
         // 并行处理UV更新
         skinData.parallelStream()
-                .filter(d -> d.enable)
-                .forEach(data -> {
-                    ImageUtils.Point uvPoint = uvPoints.get(0);
-                    uvPoints.remove(0);
-                    data.skinData.getMinecraftGeometry().parallelStream()
-                            .filter(geo -> !geo.getBones().isEmpty())
-                            .forEach(geo -> geo.getBones().parallelStream()
-                                    .forEach(bone -> {
-                                        for(GeometryJsonData.Geometry.Bone.Cube cube : bone.getCubes()) {
-                                            int[] uv = new int[]{cube.getUv()[0], cube.getUv()[1]};
-                                            uv[0] += uvPoint.x;
-                                            uv[1] += uvPoint.y;
-                                            cube.setUv(uv);
-                                        }
-                                    }));
-                });
+            .filter(d -> d.enable)
+            .forEach(data -> {
+                ImageUtils.Point uvPoint = uvPoints.get(0);
+                uvPoints.remove(0);
+                data.skinData.getMinecraftGeometry().parallelStream()
+                    .filter(geo -> !geo.getBones().isEmpty())
+                    .forEach(geo -> {
+                        geo.getBones().parallelStream()
+                            .forEach(bone -> {
+                                List<GeometryJsonData.Geometry.Bone.Cube> newCubes = new ArrayList<>();
+                                for(GeometryJsonData.Geometry.Bone.Cube cube : bone.getCubes()) {
+                                    GeometryJsonData.Geometry.Bone.Cube newCube = cube.clone();
+                                    newCube.setUv(new int[]{
+                                        cube.getUv()[0] + uvPoint.x,
+                                        cube.getUv()[1] + uvPoint.y
+                                    });
+                                    newCubes.add(newCube);
+                                }
+                                bone.setCubes(newCubes);
+                            });
+                    });
+            });
         // 处理骨骼添加
         pd.getMinecraftGeometry().parallelStream()
                 .forEach(geometry -> {

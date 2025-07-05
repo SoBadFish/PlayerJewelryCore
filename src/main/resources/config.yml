@@ -1,2 +1,5 @@
 # 是否开启玩家进服更新皮肤
 enable-join-update: true
+
+# 是否生成合并的模型文件
+generate-merge-model: true

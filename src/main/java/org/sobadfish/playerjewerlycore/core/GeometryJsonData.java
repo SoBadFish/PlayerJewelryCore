@@ -2,13 +2,14 @@ package org.sobadfish.playerjewerlycore.core;
 
 import com.google.gson.annotations.SerializedName;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 /**
  * 玩家JSON模型数据实体类
  * */
-public class GeometryJsonData {
+public class GeometryJsonData implements Cloneable {
     private String format_version;
 
     @SerializedName("minecraft:geometry")
@@ -31,7 +32,23 @@ public class GeometryJsonData {
         this.minecraftGeometry = minecraftGeometry;
     }
 
-    public static class Geometry {
+    @Override
+    public GeometryJsonData clone() {
+        try {
+            GeometryJsonData data = (GeometryJsonData) super.clone();
+            if (minecraftGeometry != null) {
+                data.minecraftGeometry = new ArrayList<>();
+                for (Geometry geometry : minecraftGeometry) {
+                    data.minecraftGeometry.add(geometry.clone());
+                }
+            }
+            return data;
+        } catch (CloneNotSupportedException e) {
+            throw new AssertionError();
+        }
+    }
+
+    public static class Geometry implements Cloneable{
         private Description description;
         private List<Bone> bones;
 
@@ -50,6 +67,33 @@ public class GeometryJsonData {
 
         public void setBones(List<Bone> bones) {
             this.bones = bones;
+        }
+
+        @Override
+        public Geometry clone() {
+            try {
+                Geometry clone = (Geometry) super.clone();
+                if (description != null) {
+                    clone.description = new Description();
+                    clone.description.identifier = description.identifier;
+                    clone.description.texture_width = description.texture_width;
+                    clone.description.texture_height = description.texture_height;
+                    clone.description.visible_bounds_width = description.visible_bounds_width;
+                    clone.description.visible_bounds_height = description.visible_bounds_height;
+                    if (description.visible_bounds_offset != null) {
+                        clone.description.visible_bounds_offset = description.visible_bounds_offset.clone();
+                    }
+                }
+                if (bones != null) {
+                    clone.bones = new ArrayList<>();
+                    for (Bone bone : bones) {
+                        clone.bones.add(bone.clone());
+                    }
+                }
+                return clone;
+            } catch (CloneNotSupportedException e) {
+                throw new AssertionError();
+            }
         }
 
         public static class Description {
@@ -110,7 +154,7 @@ public class GeometryJsonData {
             }
         }
 
-        public static class Bone {
+        public static class Bone implements Cloneable{
             private String name;
             private String parent;
             private double[] pivot;
@@ -189,6 +233,28 @@ public class GeometryJsonData {
                 this.inflate = inflate;
             }
 
+            @Override
+            public Bone clone() {
+                try {
+                    Bone clone = (Bone) super.clone();
+                    if (pivot != null) {
+                        clone.pivot = pivot.clone();
+                    }
+                    if (rotation != null) {
+                        clone.rotation = rotation.clone();
+                    }
+                    if (cubes != null) {
+                        clone.cubes = new ArrayList<>();
+                        for (Cube cube : cubes) {
+                            clone.cubes.add(cube.clone());
+                        }
+                    }
+                    return clone;
+                } catch (CloneNotSupportedException e) {
+                    throw new AssertionError();
+                }
+            }
+
             public static class PolyMesh{
 
                 @SerializedName("normalized_uvs")
@@ -242,7 +308,7 @@ public class GeometryJsonData {
 
             }
 
-            public static class Cube {
+            public static class Cube implements Cloneable{
                 private float[] origin;
                 private float[] size;
                 private int[] uv;
@@ -279,6 +345,25 @@ public class GeometryJsonData {
 
                 public void setInflate(Float inflate) {
                     this.inflate = inflate;
+                }
+
+                @Override
+                public Cube clone() {
+                    try {
+                        Cube clone = (Cube) super.clone();
+                        if (origin != null) {
+                            clone.origin = origin.clone();
+                        }
+                        if (size != null) {
+                            clone.size = size.clone();
+                        }
+                        if (uv != null) {
+                            clone.uv = uv.clone();
+                        }
+                        return clone;
+                    } catch (CloneNotSupportedException e) {
+                        throw new AssertionError();
+                    }
                 }
             }
         }

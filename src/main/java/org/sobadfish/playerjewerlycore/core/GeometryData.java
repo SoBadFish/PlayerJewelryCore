@@ -2,7 +2,7 @@ package org.sobadfish.playerjewerlycore.core;
 
 import java.awt.image.BufferedImage;
 
-public class GeometryData {
+public class GeometryData implements Cloneable{
 
     public BufferedImage image;
 
@@ -15,6 +15,12 @@ public class GeometryData {
         this.skinData = geometryJsonData;
     }
 
+    public GeometryData(BufferedImage image, GeometryJsonData geometryJsonData,boolean enable) {
+        this.image = image;
+        this.skinData = geometryJsonData;
+        this.enable = enable;
+    }
+
 
     public void setEnable(boolean enable) {
         this.enable = enable;
@@ -22,5 +28,16 @@ public class GeometryData {
 
     public boolean isEnable() {
         return enable;
+    }
+
+    @Override
+    public GeometryData clone() {
+        try {
+            GeometryData geometryData = (GeometryData) super.clone();
+            geometryData.skinData = this.skinData.clone();
+            return geometryData;
+        } catch (CloneNotSupportedException e) {
+            return null;
+        }
     }
 }
