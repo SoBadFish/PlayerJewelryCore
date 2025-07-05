@@ -41,7 +41,7 @@ public class PlayerJewelryCore extends PluginBase implements Listener {
     /**
      * 玩家初始模型
      * */
-    public Skin defaultSkin;
+    public LinkedHashMap<String, Skin> PLAYER_DEFAULT_SKIN = new LinkedHashMap<>();
 
     ExecutorService executorService = Executors.newSingleThreadExecutor();
 
@@ -58,6 +58,7 @@ public class PlayerJewelryCore extends PluginBase implements Listener {
         this.getServer().getPluginManager().registerEvents(this,this);
 
         saveDefaultConfig();
+        reloadConfig();
         this.getLogger().info("玩家饰品核心 已加载");
     }
 
@@ -112,19 +113,24 @@ public class PlayerJewelryCore extends PluginBase implements Listener {
     public void onJoin(PlayerJoinEvent event) {
         // 玩家加入事件的处理逻辑
         Player player = event.getPlayer();
-        defaultSkin = player.getSkin();
-        sendMessageToConsole("&e正在进行饰品渲染");
-        updatePlayerSkinModel(player);
+        PLAYER_DEFAULT_SKIN.put(player.getName(), player.getSkin());
+        if(getConfig().getBoolean("enable-join-update",true)) {
+            sendMessageToConsole("&e正在进行饰品渲染");
+            updatePlayerSkinModel(player);
+        }
     }
 
 
     public void updatePlayerSkinModel(Player player){
         // 替换皮肤
-        if (defaultSkin.getSkinData().width >= 128) {
+        if(!PLAYER_DEFAULT_SKIN.containsKey(player.getName())){
+            return;
+        }
+        if (PLAYER_DEFAULT_SKIN.get(player.getName()).getSkinData().width >= 128) {
             return;
         }
         //异步处理
-        Skin modelBone = player.getSkin();
+        Skin modelBone = PLAYER_DEFAULT_SKIN.get(player.getName());
         executorService.execute(() -> {
             Gson gson = new GsonBuilder().create();
             List<GeometryData> geometryData = new ArrayList<>(PLAYERS.values());
@@ -206,6 +212,7 @@ public class PlayerJewelryCore extends PluginBase implements Listener {
             GeometryJsonData.Geometry.Description desc = geometry.getDescription();
             if (desc != null) {
                 if(desc.getTexture_width() >= 64 && desc.getTexture_height() >= 64) {
+                    //当有这个的时候就证明是 原版 1.12皮肤模型 需要更改纹理大小
                     desc.setTexture_width(result.mergedImage.getWidth());
                     desc.setTexture_height(result.mergedImage.getHeight());
                     desc.setVisible_bounds_width(0);
