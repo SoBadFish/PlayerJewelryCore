@@ -134,7 +134,7 @@ public class PlayerJewelryCore extends PluginBase implements Listener {
         executorService.execute(() -> {
             Gson gson = new GsonBuilder().create();
             List<GeometryData> geometryData = new ArrayList<>(PLAYERS.values());
-            MergeResultGeometry pd = loadGeometry(player.getSkin(),geometryData);
+            MergeResultGeometry pd = loadGeometry(PLAYER_DEFAULT_SKIN.get(player.getName()),geometryData);
             //生成模型和图片用作测试
 //            File last = new File(getDataFolder() + "/merged_" + player.getName() + ".last.png");
 //            try {
@@ -166,82 +166,72 @@ public class PlayerJewelryCore extends PluginBase implements Listener {
 
         });
     }
-
     /**
-     * 玩家皮肤 加载 部分模型
+     * 玩家皮肤加载模型
      * */
-    private MergeResultGeometry loadGeometry(Skin defSkin, List<GeometryData> skinData){
+    private MergeResultGeometry loadGeometry(Skin defSkin, List<GeometryData> skinData) {
+        // 缓存解析结果
         Gson gson = new Gson();
-        SerializedImage image = defSkin.getSkinData();
-        BufferedImage defaultSkinPng = ImageUtils.serializedImageToBufferedImage(image);
-        List<BufferedImage> bufferedImages = new ArrayList<>();
-        bufferedImages.add(defaultSkinPng);
-        for(GeometryData geometryData : skinData){
-            if(!geometryData.enable){
-                continue;
-            }
-            bufferedImages.add(geometryData.image);
-        }
-
-        ImageUtils.MergeResult result = ImageUtils.mergeImagesWithDynamicCanvas(bufferedImages.toArray(new BufferedImage[0]));
         GeometryJsonData pd = gson.fromJson(defSkin.getGeometryData(), GeometryJsonData.class);
 
-        //更新模型的UV
-        int uvIndex = 1;
-        for(GeometryData data: skinData){
-            if(!data.enable){
-                continue;
-            }
-            ImageUtils.Point uvPoint = result.positions.get(uvIndex);
-            for(GeometryJsonData.Geometry geo:data.skinData.getMinecraftGeometry()){
-                if(!geo.getBones().isEmpty()){
-                    List<GeometryJsonData.Geometry.Bone> defbone = geo.getBones();
-                    for(GeometryJsonData.Geometry.Bone bone: defbone){
-                        //修改坐标
-                        for(GeometryJsonData.Geometry.Bone.Cube cube: bone.getCubes()){
-                            int[] uv = new int[]{cube.getUv()[0] + uvPoint.x,cube.getUv()[1] + uvPoint.y};
-                            cube.setUv(uv);
+        // 预分配图像集合大小
+        int enabledCount = (int)skinData.stream().filter(d -> d.enable).count();
+        List<BufferedImage> bufferedImages = new ArrayList<>(enabledCount + 1);
+        bufferedImages.add(ImageUtils.serializedImageToBufferedImage(defSkin.getSkinData()));
+
+        // 并行处理图像收集
+        skinData.parallelStream()
+                .filter(d -> d.enable)
+                .forEach(d -> bufferedImages.add(d.image));
+
+        ImageUtils.MergeResult result = ImageUtils.mergeImagesWithDynamicCanvas(bufferedImages.toArray(new BufferedImage[0]));
+
+        // 预计算UV点
+        List<ImageUtils.Point> uvPoints = new ArrayList<>(enabledCount);
+        for(int i = 1; i <= enabledCount; i++) {
+            uvPoints.add(result.positions.get(i));
+        }
+
+        // 并行处理UV更新
+        skinData.parallelStream()
+                .filter(d -> d.enable)
+                .forEach(data -> {
+                    ImageUtils.Point uvPoint = uvPoints.get(0);
+                    uvPoints.remove(0);
+                    data.skinData.getMinecraftGeometry().parallelStream()
+                            .filter(geo -> !geo.getBones().isEmpty())
+                            .forEach(geo -> geo.getBones().parallelStream()
+                                    .forEach(bone -> {
+                                        for(GeometryJsonData.Geometry.Bone.Cube cube : bone.getCubes()) {
+                                            int[] uv = new int[]{cube.getUv()[0], cube.getUv()[1]};
+                                            uv[0] += uvPoint.x;
+                                            uv[1] += uvPoint.y;
+                                        }
+                                    }));
+                });
+        // 处理骨骼添加
+        pd.getMinecraftGeometry().parallelStream()
+                .forEach(geometry -> {
+                    GeometryJsonData.Geometry.Description desc = geometry.getDescription();
+                    if (desc != null && desc.getTexture_width() >= 64 && desc.getTexture_height() >= 64) {
+                        desc.setTexture_width(result.mergedImage.getWidth());
+                        desc.setTexture_height(result.mergedImage.getHeight());
+                        desc.setVisible_bounds_width(0);
+                        desc.setVisible_bounds_height(0);
+                        List<GeometryJsonData.Geometry.Bone> bones = geometry.getBones();
+                        if(bones != null) {
+                            skinData.stream()
+                                    .filter(d -> !d.skinData.getMinecraftGeometry().isEmpty())
+                                    .forEach(data -> data.skinData.getMinecraftGeometry().stream()
+                                            .filter(geo -> !geo.getBones().isEmpty())
+                                            .forEach(geo -> bones.addAll(geo.getBones())));
                         }
                     }
-                }
-            }
-            uvIndex++;
-        }
-        //更改骨骼
-        for (GeometryJsonData.Geometry geometry : pd.getMinecraftGeometry()) {
-            GeometryJsonData.Geometry.Description desc = geometry.getDescription();
-            if (desc != null) {
-                if(desc.getTexture_width() >= 64 && desc.getTexture_height() >= 64) {
-                    //当有这个的时候就证明是 原版 1.12皮肤模型 需要更改纹理大小
-                    desc.setTexture_width(result.mergedImage.getWidth());
-                    desc.setTexture_height(result.mergedImage.getHeight());
-                    desc.setVisible_bounds_width(0);
-                    desc.setVisible_bounds_height(0);
-                }else{
-                    continue;
-                }
-            }else{
-                continue;
-            }
-            // 添加骨骼
-            List<GeometryJsonData.Geometry.Bone> bones = geometry.getBones();
-            if(bones != null){
-                for(GeometryData data: skinData){
-                    if (!data.skinData.getMinecraftGeometry().isEmpty()) {
-                        //需要添加的骨骼模型
-                        for(GeometryJsonData.Geometry geo:data.skinData.getMinecraftGeometry()){
-                            if(!geo.getBones().isEmpty()){
-                                bones.addAll( geo.getBones());
-                            }
-                        }
-                    }
-                    uvIndex++;
-                }
-            }
-            geometry.setBones(bones);
-        }
-        return new MergeResultGeometry(result.mergedImage,pd);
+                });
+
+        return new MergeResultGeometry(result.mergedImage, pd);
     }
+
 
     public static void sendMessageToObject(String msg, Object o){
         String message = TextFormat.colorize('&',PLUGIN_NAME+" &r"+msg);
@@ -263,4 +253,7 @@ public class PlayerJewelryCore extends PluginBase implements Listener {
     public static void sendMessageToConsole(String msg){
         sendMessageToObject(msg,null);
     }
+
+
+
 }
